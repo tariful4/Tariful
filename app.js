@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { getDatabase, ref, set, push, onValue, get } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+import { getDatabase, ref, set, push, onValue, get, update } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyD62pLbwBDSyszTVuN4pi83SIBxFMjjfqQ",
@@ -17,104 +17,99 @@ const db = getDatabase(app);
 let currentUser = null;
 let currentChatId = null;
 
-// টাইম ফরম্যাট ফাংশন (১২ ঘণ্টা)
-const get12HourTime = () => new Date().toLocaleString('en-US', { hour: 'numeric', minute: 'numeric', hour12: true });
-
-// ফরম সুইচিং
-document.getElementById('toReg').onclick = () => { document.getElementById('login-form').style.display='none'; document.getElementById('reg-form').style.display='block'; };
-document.getElementById('toLogin').onclick = () => { document.getElementById('reg-form').style.display='none'; document.getElementById('login-form').style.display='block'; };
-
-// রেজিস্ট্রেশন
-document.getElementById('registerBtn').onclick = async () => {
-    const user = document.getElementById('regUser').value;
+// রেজিস্ট্রেশন লজিক
+document.getElementById('startBtn').onclick = async () => {
+    const name = document.getElementById('regName').value;
+    const phone = document.getElementById('regPhone').value;
     const pass = document.getElementById('regPass').value;
-    if(!user || !pass) return alert("Fill all fields!");
+    if(!phone || !pass) return alert("Phone and Password required!");
 
-    const dbId = user.replace(/[^a-zA-Z0-9]/g, "");
-    const userRef = ref(db, 'users/' + dbId);
-    const snap = await get(userRef);
-
-    if(snap.exists()) return alert("Account already exists! Please Login.");
-
-    currentUser = { id: dbId, username: user.split('@')[0], password: pass, profilePic: `https://ui-avatars.com/api/?name=${user}&background=random` };
-    await set(userRef, currentUser);
-    startApp();
-};
-
-// লগইন
-document.getElementById('loginBtn').onclick = async () => {
-    const user = document.getElementById('loginUser').value;
-    const pass = document.getElementById('loginPass').value;
-    const dbId = user.replace(/[^a-zA-Z0-9]/g, "");
+    const dbId = phone.replace(/[^a-zA-Z0-9]/g, "");
     const userRef = ref(db, 'users/' + dbId);
     const snap = await get(userRef);
 
     if(snap.exists() && snap.val().password === pass) {
         currentUser = snap.val();
-        startApp();
-    } else alert("Invalid Credentials!");
+    } else {
+        currentUser = { id: dbId, username: name || phone, password: pass, profilePic: "https://cdn-icons-png.flaticon.com/512/149/149071.png" };
+        await set(userRef, currentUser);
+    }
+    startApp();
 };
 
 function startApp() {
-    localStorage.setItem("m_user", JSON.stringify(currentUser));
     document.getElementById('auth-container').style.display = 'none';
-    document.getElementById('messenger-app').style.display = 'block';
+    document.getElementById('app-interface').style.display = 'block';
     document.getElementById('myPic').src = currentUser.profilePic;
-    loadUserLists();
+    loadUsers();
 }
 
-// অটোমেটিক ইউজার লিস্ট লোড
-function loadUserLists() {
+// অটোমেটিক অন্য অ্যাকাউন্টগুলো দেখাবে
+function loadUsers() {
     onValue(ref(db, 'users/'), (snap) => {
         const list = document.getElementById('users-list');
-        const activeBar = document.getElementById('active-bar');
-        list.innerHTML = ""; activeBar.innerHTML = "";
-
+        list.innerHTML = "";
         snap.forEach(child => {
             const u = child.val();
-            if(u.id === currentUser.id) return;
-
-            // স্টোরি বার
-            activeBar.innerHTML += `<img src="${u.profilePic}" class="story-circle" onclick="openChat('${u.id}','${u.username}','${u.profilePic}')">`;
-
-            // চ্যাট লিস্ট
-            list.innerHTML += `
-                <div class="chat-item" onclick="openChat('${u.id}','${u.username}','${u.profilePic}')">
-                    <img src="${u.profilePic}">
-                    <div class="chat-info"><b>${u.username}</b><p>Active now</p></div>
+            if(u.id !== currentUser.id) {
+                list.innerHTML += `<div class="chat-item" onclick="openChat('${u.id}','${u.username}','${u.profilePic}')" style="display:flex; align-items:center; padding:15px; border-bottom:1px solid #eee; cursor:pointer;">
+                    <img src="${u.profilePic}" style="width:50px; height:50px; border-radius:50%; margin-right:15px;">
+                    <b>${u.username}</b>
                 </div>`;
+            }
         });
     });
 }
 
-// ইনবক্স ওপেন
+// প্রোফাইল এডিট অপশন
+document.getElementById('editProfileBtn').onclick = () => {
+    document.getElementById('edit-modal').style.display = 'flex';
+    document.getElementById('editName').value = currentUser.username;
+    document.getElementById('editPic').value = currentUser.profilePic;
+};
+
+document.getElementById('saveProfileBtn').onclick = async () => {
+    const newName = document.getElementById('editName').value;
+    const newPic = document.getElementById('editPic').value;
+    await update(ref(db, 'users/' + currentUser.id), { username: newName, profilePic: newPic });
+    currentUser.username = newName;
+    currentUser.profilePic = newPic;
+    document.getElementById('myPic').src = newPic;
+    document.getElementById('edit-modal').style.display = 'none';
+};
+
+document.getElementById('closeModal').onclick = () => document.getElementById('edit-modal').style.display = 'none';
+
+// চ্যাট ওপেন এবং নোটিফিকেশন লজিক
 window.openChat = (id, name, pic) => {
     document.getElementById('chat-list-page').style.display = 'none';
     document.getElementById('inbox-page').style.display = 'block';
-    document.getElementById('partnerName').innerText = name;
-    document.getElementById('partnerPic').src = pic;
+    document.getElementById('pName').innerText = name;
+    document.getElementById('pPic').src = pic;
+    document.getElementById('notif-dot').style.display = 'none'; // চ্যাট ওপেন করলে লাল ডট চলে যাবে
     currentChatId = [currentUser.id, id].sort().join("_");
-    
+    loadMsg();
+};
+
+function loadMsg() {
     onValue(ref(db, 'chats/' + currentChatId), (snap) => {
         const box = document.getElementById('chat-box');
         box.innerHTML = "";
-        let lastTime = "";
         snap.forEach(m => {
             const d = m.val();
-            if(d.time !== lastTime) {
-                box.innerHTML += `<div class="time-stamp">${d.time}</div>`;
-                lastTime = d.time;
-            }
             box.innerHTML += `<div class="msg ${d.s === currentUser.id ? 'sent' : 'received'}">${d.t}</div>`;
+            if(d.s !== currentUser.id && document.getElementById('inbox-page').style.display === 'none') {
+                document.getElementById('notif-dot').style.display = 'block'; // নতুন মেসেজ আসলে লাল ডট দেখাবে
+            }
         });
         box.scrollTop = box.scrollHeight;
     });
-};
+}
 
 document.getElementById('sendBtn').onclick = () => {
     const t = document.getElementById('messageInput').value;
     if(!t) return;
-    push(ref(db, 'chats/' + currentChatId), { s: currentUser.id, t, time: get12HourTime() });
+    push(ref(db, 'chats/' + currentChatId), { s: currentUser.id, t, time: new Date().toLocaleTimeString() });
     document.getElementById('messageInput').value = "";
 };
 
@@ -122,8 +117,3 @@ document.getElementById('backBtn').onclick = () => {
     document.getElementById('inbox-page').style.display = 'none';
     document.getElementById('chat-list-page').style.display = 'block';
 };
-
-document.getElementById('logoutBtn').onclick = () => { localStorage.clear(); location.reload(); };
-
-const saved = localStorage.getItem("m_user");
-if(saved) { currentUser = JSON.parse(saved); startApp(); }
