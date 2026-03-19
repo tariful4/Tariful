@@ -1,0 +1,8 @@
+body { font-family: Arial, sans-serif; background: #f0f2f5; display: flex; justify-content: center; padding: 20px; }
+#auth-container, #chat-container { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); width: 350px; }
+input { width: 90%; padding: 10px; margin-bottom: 10px; border: 1px solid #ddd; border-radius: 5px; }
+button { width: 100%; padding: 10px; background: #0084ff; color: white; border: none; cursor: pointer; border-radius: 5px; }
+#chat-box { height: 300px; border: 1px solid #eee; margin: 10px 0; overflow-y: scroll; padding: 10px; display: flex; flex-direction: column; }
+.msg { padding: 8px; margin: 5px; border-radius: 5px; max-width: 80%; }
+.my-msg { background: #dcf8c6; align-self: flex-end; }
+.other-msg { background: #ebebeb; align-self: flex-start; }
