@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { getDatabase, ref, set, push, onValue, get, remove, onDisconnect } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+import { getDatabase, ref, set, push, onValue, get, onDisconnect } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyD62pLbwBDSyszTVuN4pi83SIBxFMjjfqQ",
@@ -8,122 +8,113 @@ const firebaseConfig = {
   projectId: "tariful-4f6c2",
   storageBucket: "tariful-4f6c2.firebasestorage.app",
   messagingSenderId: "882412147422",
-  appId: "1:882412147422:web:3100db9391ccd0bdc4684f",
-  measurementId: "G-TDF69WJXNP"
+  appId: "1:882412147422:web:3100db9391ccd0bdc4684f"
 };
 
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 
 let currentUser = null;
-let chatPartner = null;
 let currentChatId = null;
 
 // ১২ ঘণ্টার টাইম ফরম্যাট ফাংশন
-function formatTime() {
-    return new Date().toLocaleString('en-US', { hour: 'numeric', minute: 'numeric', hour12: true });
-}
+const formatTime = () => new Date().toLocaleString('en-US', { hour: 'numeric', minute: 'numeric', hour12: true });
 
-// অটো লগইন চেক
-window.onload = () => {
-    const saved = localStorage.getItem("messenger_user");
-    if(saved) {
-        currentUser = JSON.parse(saved);
-        loginSuccess();
-    }
-};
-
-// রেজিস্ট্রেশন ও লগইন
+// লগইন ও রেজিস্ট্রেশন লজিক (Duplicate Check)
 document.getElementById('authBtn').onclick = async () => {
-    const name = document.getElementById('regName').value;
-    const email = document.getElementById('regEmail').value;
-    const phone = document.getElementById('regPhone').value;
-    const pass = document.getElementById('regPass').value;
+    const userVal = document.getElementById('userVal').value;
+    const pass = document.getElementById('userPass').value;
+    if(!userVal || !pass) return alert("সব ঘর পূরণ করুন!");
 
-    if(!phone || !pass) return alert("Phone and Password are required!");
-
-    const userRef = ref(db, 'users/' + phone);
+    const dbId = userVal.replace(/[^a-zA-Z0-9]/g, ""); // ফোন বা জিমেইলকে আইডিতে রূপান্তর
+    const userRef = ref(db, 'users/' + dbId);
     const snap = await get(userRef);
 
     if(snap.exists()){
+        // অ্যাকাউন্ট থাকলে পাসওয়ার্ড চেক করে লগইন হবে
         if(snap.val().password === pass) {
             currentUser = snap.val();
-            loginSuccess();
-        } else alert("Wrong password!");
+            startApp();
+        } else {
+            alert("ভুল পাসওয়ার্ড অথবা এই নম্বরটি অন্য কেউ ব্যবহার করছে!");
+        }
     } else {
-        currentUser = { username: name || "New User", email: email || "N/A", phone, password: pass, profilePic: "https://ui-avatars.com/api/?name="+name, status: "online" };
+        // নতুন রেজিস্ট্রেশন (Duplicate Blocked)
+        currentUser = { 
+            id: dbId, 
+            username: userVal.split('@')[0], 
+            password: pass, 
+            profilePic: `https://ui-avatars.com/api/?name=${userVal}&background=random`,
+            status: "online"
+        };
         await set(userRef, currentUser);
-        loginSuccess();
+        startApp();
     }
 };
 
-function loginSuccess() {
-    localStorage.setItem("messenger_user", JSON.stringify(currentUser));
+function startApp() {
+    localStorage.setItem("m_user", JSON.stringify(currentUser));
     document.getElementById('auth-container').style.display = 'none';
-    document.getElementById('chat-interface').style.display = 'flex';
-    document.getElementById('myName').innerText = currentUser.username;
+    document.getElementById('messenger-app').style.display = 'block';
     document.getElementById('myPic').src = currentUser.profilePic;
+    document.getElementById('myName').innerText = currentUser.username;
 
-    // অনলাইন স্ট্যাটাস হ্যান্ডলিং
-    const statusRef = ref(db, 'users/' + currentUser.phone + '/status');
+    const statusRef = ref(db, 'users/' + currentUser.id + '/status');
     set(statusRef, "online");
     onDisconnect(statusRef).set("offline");
 
-    loadUsers();
+    loadUserList();
 }
 
-// ইউজার লিস্ট লোড (প্রাইভেসি মেনটেইন করে)
-function loadUsers() {
-    onValue(ref(db, 'users/'), (snapshot) => {
-        const listDiv = document.getElementById('users-list');
-        listDiv.innerHTML = "";
-        snapshot.forEach(child => {
+// চ্যাট লিস্ট ও স্টোরি বার লোড করা
+function loadUserList() {
+    onValue(ref(db, 'users/'), (snap) => {
+        const list = document.getElementById('users-list');
+        const stories = document.getElementById('active-users-bar');
+        list.innerHTML = ""; stories.innerHTML = "";
+
+        snap.forEach(child => {
             const user = child.val();
-            if(user.phone !== currentUser.phone) {
-                const item = document.createElement('div');
-                item.className = 'user-item';
-                item.innerHTML = `
-                    <div class="avatar-box">
-                        <img src="${user.profilePic}" class="list-avatar">
-                        <div class="status-dot ${user.status === 'online' ? 'online' : ''}"></div>
-                    </div>
-                    <div>
-                        <div style="font-weight:bold;">${user.username}</div>
-                        <div style="font-size:12px; color:gray;">Tap to chat</div>
-                    </div>
-                `;
-                item.onclick = () => openChat(user);
-                listDiv.appendChild(item);
-            }
-        });
-    });
-}
+            if(user.id === currentUser.id) return;
 
-// চ্যাট ওপেন ও মেসেজ ম্যানেজমেন্ট
-function openChat(partner) {
-    chatPartner = partner;
-    document.getElementById('chat-header').innerText = partner.username;
-    document.getElementById('input-section').style.display = 'flex';
-    currentChatId = [currentUser.phone, partner.phone].sort().join("_");
+            // স্টোরি বার
+            stories.innerHTML += `<img src="${user.profilePic}" class="story-avatar" onclick="openInbox('${user.id}','${user.username}','${user.profilePic}')">`;
 
-    // মেসেজ লোড
-    onValue(ref(db, 'chats/' + currentChatId), (snapshot) => {
-        const box = document.getElementById('chat-box');
-        box.innerHTML = "";
-        snapshot.forEach(m => {
-            const data = m.val();
-            box.innerHTML += `
-                <div class="msg-container ${data.sender === currentUser.phone ? 'sent' : 'received'}">
-                    <div class="bubble">${data.text}</div>
-                    <div class="time">${data.timestamp}</div>
+            // মেইন লিস্ট
+            list.innerHTML += `
+                <div class="user-item" onclick="openInbox('${user.id}','${user.username}','${user.profilePic}')">
+                    <img src="${user.profilePic}">
+                    <div><b>${user.username}</b><p style="color:gray; font-size:12px;">Active now</p></div>
                 </div>`;
         });
-        box.scrollTop = box.scrollHeight;
     });
+}
 
-    // টাইপিং স্ট্যাটাস চেক
-    onValue(ref(db, `typing/${currentChatId}/${partner.phone}`), (snap) => {
-        document.getElementById('typing-text').innerText = snap.val() ? partner.username + " is typing..." : "";
+// ইনবক্স ফাংশন
+window.openInbox = (id, name, pic) => {
+    document.getElementById('chat-list-page').style.display = 'none';
+    document.getElementById('inbox-page').style.display = 'block';
+    document.getElementById('partnerName').innerText = name;
+    document.getElementById('partnerPic').src = pic;
+    
+    currentChatId = [currentUser.id, id].sort().join("_");
+    loadMessages();
+};
+
+function loadMessages() {
+    onValue(ref(db, 'chats/' + currentChatId), (snap) => {
+        const box = document.getElementById('chat-box');
+        box.innerHTML = "";
+        let lastT = "";
+        snap.forEach(m => {
+            const d = m.val();
+            if(d.time !== lastT) {
+                box.innerHTML += `<div class="time-stamp">${d.time}</div>`;
+                lastT = d.time;
+            }
+            box.innerHTML += `<div class="msg ${d.sender === currentUser.id ? 'sent' : 'received'}">${d.text}</div>`;
+        });
+        box.scrollTop = box.scrollHeight;
     });
 }
 
@@ -132,45 +123,25 @@ document.getElementById('sendBtn').onclick = () => {
     const text = document.getElementById('messageInput').value;
     if(!text) return;
     push(ref(db, 'chats/' + currentChatId), {
-        sender: currentUser.phone,
+        sender: currentUser.id,
         text: text,
-        timestamp: formatTime()
+        time: formatTime()
     });
     document.getElementById('messageInput').value = "";
-    set(ref(db, `typing/${currentChatId}/${currentUser.phone}`), false);
 };
 
-// টাইপিং ইভেন্ট
-document.getElementById('messageInput').oninput = () => {
-    if(currentChatId) {
-        set(ref(db, `typing/${currentChatId}/${currentUser.phone}`), true);
-        clearTimeout(window.tTimer);
-        window.tTimer = setTimeout(() => set(ref(db, `typing/${currentChatId}/${currentUser.phone}`), false), 2000);
-    }
+// ব্যাক বাটন ও লগআউট
+document.getElementById('backBtn').onclick = () => {
+    document.getElementById('inbox-page').style.display = 'none';
+    document.getElementById('chat-list-page').style.display = 'block';
 };
 
-// সেটিংস ও লগআউট
 document.getElementById('logoutBtn').onclick = () => {
-    set(ref(db, 'users/' + currentUser.phone + '/status'), "offline");
-    localStorage.removeItem("messenger_user");
+    set(ref(db, 'users/' + currentUser.id + '/status'), "offline");
+    localStorage.clear();
     location.reload();
 };
 
-document.getElementById('updateBtn').onclick = async () => {
-    const newName = document.getElementById('newName').value;
-    const newPic = document.getElementById('newPic').value;
-    if(newName) currentUser.username = newName;
-    if(newPic) currentUser.profilePic = newPic;
-    await set(ref(db, 'users/' + currentUser.phone), currentUser);
-    localStorage.setItem("messenger_user", JSON.stringify(currentUser));
-    alert("Profile Updated!");
-    location.reload();
-};
-
-document.getElementById('deleteBtn').onclick = async () => {
-    if(confirm("Delete account permanently?")) {
-        await remove(ref(db, 'users/' + currentUser.phone));
-        localStorage.removeItem("messenger_user");
-        location.reload();
-    }
-};
+// অটো লগইন চেক
+const saved = localStorage.getItem("m_user");
+if(saved) { currentUser = JSON.parse(saved); startApp(); }
