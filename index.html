@@ -41,6 +41,9 @@
         .message-bubble.sent { background: #0084ff; color: white; border-bottom-right-radius: 5px; }
         .message-bubble.received { background: #262626; color: white; border-bottom-left-radius: 5px; }
         .message-avatar { width: 30px; height: 30px; border-radius: 50%; margin-right: 8px; align-self: flex-end; }
+        
+        /* Status Text Style */
+        .msg-status { display: block; font-size: 10px; text-align: right; margin-top: 4px; opacity: 0.7; }
 
         /* Footer Fixed */
         .chat-footer { padding: 10px 15px; background: #0a0a0a; display: flex; align-items: center; gap: 10px; border-top: 1px solid #333; flex-shrink: 0; }
@@ -209,7 +212,6 @@
         }
 
         window.openInbox = (user) => {
-            // Updated: Show small loading text while internet is slow
             document.getElementById('chat-box').innerHTML = "<div style='text-align:center; color:#8c442c; padding:20px;'><i class='fas fa-spinner fa-spin'></i> Loading...</div>"; 
             
             document.getElementById('users-page').classList.add('hidden');
@@ -228,30 +230,61 @@
                     const isSent = m.sender === currentUser.id;
                     const d = document.createElement('div');
                     d.className = `message-wrapper ${isSent ? 'sent' : 'received'}`;
-                    d.innerHTML = `${!isSent ? `<img src="${user.profilePic}" class="message-avatar">`:''}<div class="message-bubble ${isSent?'sent':'received'}">${m.text}</div>`;
+                    d.innerHTML = `
+                        ${!isSent ? `<img src="${user.profilePic}" class="message-avatar">`:''}
+                        <div class="message-bubble ${isSent?'sent':'received'}">
+                            ${m.text}
+                            ${isSent ? `<span class="msg-status"><i class="fas fa-check-double"></i> Sent</span>` : ''}
+                        </div>`;
                     box.appendChild(d);
                 });
                 box.scrollTop = box.scrollHeight;
             });
         }
 
+        // UPDATED: Optimized for Slow Internet with "Sending" status
         window.sendMessage = async () => {
             const input = document.getElementById('messageInput');
-            const sendBtn = document.getElementById('sendBtn');
-            if(!input.value.trim()) return;
+            const box = document.getElementById('chat-box');
+            const msgText = input.value.trim();
+            
+            if(!msgText) return;
 
-            // Updated: Disable button to prevent double sending on slow internet
-            sendBtn.disabled = true;
-            sendBtn.style.opacity = "0.5";
+            // 1. Show message immediately with "Sending..." (Optimistic UI)
+            const tempId = "temp_" + Date.now();
+            const d = document.createElement('div');
+            d.id = tempId;
+            d.className = `message-wrapper sent`;
+            d.style.opacity = "0.7";
+            d.innerHTML = `
+                <div class="message-bubble sent">
+                    ${msgText}
+                    <span class="msg-status" id="status_${tempId}"><i class="fas fa-clock"></i> Sending...</span>
+                </div>`;
+            box.appendChild(d);
+            box.scrollTop = box.scrollHeight;
+
+            input.value = ""; // Clear input immediately
 
             try {
-                await push(ref(db, 'chats/'+currentChatId), { sender: currentUser.id, text: input.value, timestamp: Date.now() });
-                input.value = "";
+                // 2. Push to Firebase
+                await push(ref(db, 'chats/'+currentChatId), { 
+                    sender: currentUser.id, 
+                    text: msgText, 
+                    timestamp: Date.now() 
+                });
+                
+                // 3. Update status to Sent (Wait a split second for smooth feel)
+                const statusEl = document.getElementById(`status_${tempId}`);
+                if(statusEl) statusEl.innerHTML = `<i class="fas fa-check-double"></i> Sent`;
+                document.getElementById(tempId).style.opacity = "1";
+
             } catch(e) {
-                alert("Internet connection lost!");
-            } finally {
-                sendBtn.disabled = false;
-                sendBtn.style.opacity = "1";
+                const statusEl = document.getElementById(`status_${tempId}`);
+                if(statusEl) {
+                    statusEl.innerHTML = `<i class="fas fa-exclamation-circle"></i> Failed`;
+                    statusEl.style.color = "#ff4444";
+                }
             }
         }
 
@@ -290,7 +323,6 @@
         window.closeInbox = () => { document.getElementById('inbox-page').classList.add('hidden'); document.getElementById('users-page').classList.remove('hidden'); }
         window.logout = () => { localStorage.clear(); location.reload(); }
 
-        // Start the app
         start();
     </script>
 </body>
