@@ -209,8 +209,8 @@
         }
 
         window.openInbox = (user) => {
-            // Fix: Clear chat box immediately to prevent seeing old chat history
-            document.getElementById('chat-box').innerHTML = ""; 
+            // Updated: Show small loading text while internet is slow
+            document.getElementById('chat-box').innerHTML = "<div style='text-align:center; color:#8c442c; padding:20px;'><i class='fas fa-spinner fa-spin'></i> Loading...</div>"; 
             
             document.getElementById('users-page').classList.add('hidden');
             document.getElementById('inbox-page').classList.remove('hidden');
@@ -237,9 +237,22 @@
 
         window.sendMessage = async () => {
             const input = document.getElementById('messageInput');
+            const sendBtn = document.getElementById('sendBtn');
             if(!input.value.trim()) return;
-            await push(ref(db, 'chats/'+currentChatId), { sender: currentUser.id, text: input.value, timestamp: Date.now() });
-            input.value = "";
+
+            // Updated: Disable button to prevent double sending on slow internet
+            sendBtn.disabled = true;
+            sendBtn.style.opacity = "0.5";
+
+            try {
+                await push(ref(db, 'chats/'+currentChatId), { sender: currentUser.id, text: input.value, timestamp: Date.now() });
+                input.value = "";
+            } catch(e) {
+                alert("Internet connection lost!");
+            } finally {
+                sendBtn.disabled = false;
+                sendBtn.style.opacity = "1";
+            }
         }
 
         window.openSettings = () => {
