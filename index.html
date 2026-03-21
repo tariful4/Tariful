@@ -209,6 +209,9 @@
         }
 
         window.openInbox = (user) => {
+            // Fix: Clear chat box immediately to prevent seeing old chat history
+            document.getElementById('chat-box').innerHTML = ""; 
+            
             document.getElementById('users-page').classList.add('hidden');
             document.getElementById('inbox-page').classList.remove('hidden');
             document.getElementById('pName').innerText = user.username;
