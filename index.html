@@ -1,1 +1,280 @@
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { getDatabase, ref, set, push, onValue, get, update, onDisconnect, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
+const firebaseConfig = {
+    apiKey: "AIzaSyAT22X04lwGjaneGGW9sKzeO6hWVAA3n6g",
+    authDomain: "tchat-a9707.firebaseapp.com",
+    databaseURL: "https://tchat-a9707-default-rtdb.firebaseio.com",
+    projectId: "tchat-a9707",
+    storageBucket: "tchat-a9707.firebasestorage.app",
+    messagingSenderId: "324756549796",
+    appId: "1:324756549796:web:f557ebab16be9e5545f631"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
+
+let currentUser = null;
+let currentChatPartner = null;
+let currentChatId = null;
+let msgListener = null;
+let sendingLock = false;
+
+// 🔐 SECRET KEY (same for both users)
+const SECRET = "tariful_secret_key_123";
+
+// 🔐 HASH (password)
+async function hash(text){
+    const buf = new TextEncoder().encode(text);
+    const hash = await crypto.subtle.digest('SHA-256', buf);
+    return Array.from(new Uint8Array(hash)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+
+// 🔐 ENCRYPT
+async function encrypt(text){
+    const enc = new TextEncoder();
+    const key = await crypto.subtle.importKey(
+        "raw",
+        enc.encode(SECRET),
+        {name:"AES-GCM"},
+        false,
+        ["encrypt"]
+    );
+
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const cipher = await crypto.subtle.encrypt(
+        {name:"AES-GCM", iv},
+        key,
+        enc.encode(text)
+    );
+
+    return {
+        data: btoa(String.fromCharCode(...new Uint8Array(cipher))),
+        iv: btoa(String.fromCharCode(...iv))
+    };
+}
+
+// 🔓 DECRYPT
+async function decrypt(data, iv){
+    try{
+        const enc = new TextEncoder();
+        const key = await crypto.subtle.importKey(
+            "raw",
+            enc.encode(SECRET),
+            {name:"AES-GCM"},
+            false,
+            ["decrypt"]
+        );
+
+        const decrypted = await crypto.subtle.decrypt(
+            {
+                name:"AES-GCM",
+                iv: Uint8Array.from(atob(iv), c=>c.charCodeAt(0))
+            },
+            key,
+            Uint8Array.from(atob(data), c=>c.charCodeAt(0))
+        );
+
+        return new TextDecoder().decode(decrypted);
+    }catch{
+        return "[Encrypted]";
+    }
+}
+
+// ========== AUTH ==========
+window.register = async ()=>{
+    const ep = regEmailPhone.value.trim();
+    const ps = regPass.value.trim();
+    if(!ep||!ps) return alert("Fill all");
+
+    const id = 'user_'+Date.now();
+    const hashed = await hash(ps);
+
+    const user={
+        id,
+        emailPhone:ep,
+        username:ep.split('@')[0],
+        password:hashed,
+        profilePic:avatars[0],
+        lastSeen:"online"
+    };
+
+    await set(ref(db,'users/'+id),user);
+    await set(ref(db,'loginIndex/'+ep),id);
+
+    loginOk(user);
+};
+
+window.login = async ()=>{
+    const ep = loginEmailPhone.value.trim();
+    const ps = loginPass.value.trim();
+    const hashed = await hash(ps);
+
+    const idSnap = await get(ref(db,'loginIndex/'+ep));
+    if(!idSnap.exists()) return alert("User not found");
+
+    const userSnap = await get(ref(db,'users/'+idSnap.val()));
+    const user = userSnap.val();
+
+    if(user.password !== hashed) return alert("Wrong password");
+
+    loginOk(user);
+};
+
+function loginOk(user){
+    currentUser=user;
+    localStorage.setItem('user',JSON.stringify(user));
+    location.reload();
+}
+
+// ========== PRESENCE ==========
+function initPresence(){
+    const userRef = ref(db,'users/'+currentUser.id);
+    update(userRef,{lastSeen:"online"});
+    onDisconnect(userRef).set(serverTimestamp());
+}
+
+// ========== START ==========
+function startApp(){
+    auth-container.classList.add('hidden');
+    app-interface.style.display='block';
+    myPic.src=currentUser.profilePic;
+    initPresence();
+    loadUsers();
+}
+
+// ========== USERS ==========
+function loadUsers(){
+    onValue(ref(db,'users'),snap=>{
+        users-list.innerHTML="";
+        snap.forEach(c=>{
+            const u=c.val();
+            if(u.id===currentUser.id) return;
+
+            const ids=[currentUser.id,u.id].sort();
+            const chatId=ids.join('_');
+
+            const div=document.createElement('div');
+            div.className='chat-item';
+
+            div.innerHTML=`
+                <img src="${u.profilePic}">
+                <div style="flex:1;">
+                    <h4>${u.username}</h4>
+                    <small id="last-${chatId}">...</small>
+                </div>
+                <div class="unread-badge" id="badge-${chatId}" style="display:none;"></div>
+            `;
+
+            div.onclick=()=>openInbox(u);
+            users-list.appendChild(div);
+
+            // 📩 last message decrypt
+            onValue(ref(db,'lastMsg/'+chatId), async s=>{
+                const d=s.val();
+                if(d){
+                    const txt = await decrypt(d.data,d.iv);
+                    document.getElementById('last-'+chatId).innerText=txt;
+                }
+            });
+
+            // 🔢 unread
+            onValue(ref(db,'unread/'+currentUser.id+'/'+chatId), s=>{
+                const count=s.val()||0;
+                const badge=document.getElementById('badge-'+chatId);
+                if(count>0){
+                    badge.innerText=count;
+                    badge.style.display='flex';
+                }else badge.style.display='none';
+            });
+        });
+    });
+}
+
+// ========== OPEN CHAT ==========
+window.openInbox = async (partner)=>{
+    currentChatPartner=partner;
+    users-page.classList.add('hidden');
+    inbox-page.classList.remove('hidden');
+
+    pName.innerText=partner.username;
+    pPic.src=partner.profilePic;
+
+    const ids=[currentUser.id,partner.id].sort();
+    currentChatId=ids.join('_');
+
+    await set(ref(db,'unread/'+currentUser.id+'/'+currentChatId),0);
+
+    if(msgListener) msgListener();
+
+    msgListener=onValue(ref(db,'chats/'+currentChatId), async snap=>{
+        chat-box.innerHTML="";
+        snap.forEach(async m=>{
+            const msg=m.val();
+            const isSent=msg.sender===currentUser.id;
+
+            const text = await decrypt(msg.data,msg.iv);
+
+            const div=document.createElement('div');
+            div.className='message-wrapper '+(isSent?'sent':'received');
+
+            div.innerHTML=`
+                <div class="message-bubble ${isSent?'sent':'received'}">
+                    ${text}
+                </div>
+            `;
+            chat-box.appendChild(div);
+        });
+        chat-box.scrollTop=chat-box.scrollHeight;
+    });
+};
+
+// ========== SEND ==========
+window.sendMessage = async ()=>{
+    if(sendingLock) return;
+
+    const text = messageInput.value.trim();
+    if(!text) return;
+
+    sendingLock=true;
+    sendBtn.disabled=true;
+
+    try{
+        const enc = await encrypt(text);
+
+        await push(ref(db,'chats/'+currentChatId),{
+            sender:currentUser.id,
+            data:enc.data,
+            iv:enc.iv,
+            timestamp:Date.now()
+        });
+
+        await set(ref(db,'lastMsg/'+currentChatId),{
+            data:enc.data,
+            iv:enc.iv,
+            time:Date.now()
+        });
+
+        const otherId=currentChatPartner.id;
+        const unreadRef=ref(db,'unread/'+otherId+'/'+currentChatId);
+        const snap=await get(unreadRef);
+        const count=snap.val()||0;
+        await set(unreadRef,count+1);
+
+        messageInput.value="";
+    }catch(e){
+        alert("Send fail");
+    }
+
+    sendingLock=false;
+    sendBtn.disabled=false;
+};
+
+// ========== INIT ==========
+const stored = localStorage.getItem('user');
+if(stored){
+    currentUser=JSON.parse(stored);
+    startApp();
+}
+</script>
