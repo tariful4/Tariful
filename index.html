@@ -103,7 +103,7 @@
     <div id="app-interface">
         <div class="header">
             <img id="myPic" class="post-avatar" src="" onclick="showMyProfile()">
-            <h2 onclick="showNewsfeed()">Feed</h2>
+            <h2 onclick="showNewsfeed()">Public Feed</h2>
             <i class="fas fa-sign-out-alt" onclick="logout()" style="color:#8c442c; font-size: 18px;"></i>
         </div>
 
@@ -196,21 +196,12 @@
             const inbox = document.getElementById('inbox-page');
             const users = document.getElementById('users-page');
             const profile = document.getElementById('profile-page');
-
-            if (!inbox.classList.contains('hidden')) {
-                closeInbox();
-            } else if (!users.classList.contains('hidden')) {
-                closeChatList();
-            } else if (!profile.classList.contains('hidden')) {
-                showNewsfeed();
-            }
+            if (!inbox.classList.contains('hidden')) { closeInbox(); } 
+            else if (!users.classList.contains('hidden')) { closeChatList(); } 
+            else if (!profile.classList.contains('hidden')) { showNewsfeed(); }
         });
 
-        function pushState() {
-            if (window.history.state !== "app") {
-                history.pushState("app", "");
-            }
-        }
+        function pushState() { if (window.history.state !== "app") { history.pushState("app", ""); } }
 
         // --- AUTH ---
         window.toggleAuth = (reg) => {
@@ -237,28 +228,51 @@
             if(found) loginOk(found); else alert("Invalid login!");
         }
 
-        function loginOk(user) {
-            localStorage.setItem('user', JSON.stringify(user));
-            location.reload();
-        }
-
+        function loginOk(user) { localStorage.setItem('user', JSON.stringify(user)); location.reload(); }
         window.logout = () => { localStorage.clear(); location.reload(); }
+
+        // --- PROFILE UPDATES (FIXED) ---
+        window.uploadPhoto = (event) => {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = async (e) => {
+                const base64Img = e.target.result;
+                await update(ref(db, 'users/' + currentUser.id), { profilePic: base64Img });
+                currentUser.profilePic = base64Img;
+                localStorage.setItem('user', JSON.stringify(currentUser));
+                document.getElementById('profPic').src = base64Img;
+                document.getElementById('myPic').src = base64Img;
+                document.getElementById('postMyPic').src = base64Img;
+                alert("Profile picture updated!");
+            };
+            reader.readAsDataURL(file);
+        };
+
+        window.changeName = async () => {
+            const newName = prompt("Enter new name:", currentUser.username);
+            if (newName && newName.trim() !== "") {
+                await update(ref(db, 'users/' + currentUser.id), { username: newName.trim() });
+                currentUser.username = newName.trim();
+                localStorage.setItem('user', JSON.stringify(currentUser));
+                document.getElementById('profName').innerText = newName.trim();
+                alert("Name updated!");
+            }
+        };
 
         // --- COMMON POST HTML RENDERER ---
         function generatePostHTML(p) {
             const likeCount = p.likes ? Object.keys(p.likes).length : 0;
             const cmtCount = p.comments ? Object.keys(p.comments).length : 0;
             const isLiked = p.likes && p.likes[currentUser.id];
-
             let cmtHtml = "";
             if(p.comments) {
                 Object.keys(p.comments).forEach(cid => {
                     const c = p.comments[cid];
-                    const isMyCmt = c.uid === currentUser.id;
                     cmtHtml += `
                     <div class="comment-item">
                         <span class="comment-user">${c.name}:</span> ${c.text}
-                        ${isMyCmt ? `
+                        ${c.uid === currentUser.id ? `
                         <div class="cmt-actions">
                             <i class="fas fa-edit" onclick="editComment('${p.id}', '${cid}', '${c.text}')"></i>
                             <i class="fas fa-trash" onclick="deleteComment('${p.id}', '${cid}')"></i>
@@ -266,7 +280,6 @@
                     </div>`;
                 });
             }
-
             return `
             <div class="post-card">
                 <div class="post-header">
@@ -294,58 +307,27 @@
         window.createPost = async () => {
             const txt = document.getElementById('postText').value.trim();
             if(!txt) return;
-            const postData = {
-                uid: currentUser.id,
-                name: currentUser.username,
-                pic: currentUser.profilePic || defaultPic,
-                text: txt,
-                timestamp: Date.now()
-            };
-            await push(ref(db, 'posts'), postData);
+            await push(ref(db, 'posts'), { uid: currentUser.id, name: currentUser.username, pic: currentUser.profilePic || defaultPic, text: txt, timestamp: Date.now() });
             document.getElementById('postText').value = "";
         }
-
         window.toggleLike = async (pid) => {
             const postRef = ref(db, `posts/${pid}/likes/${currentUser.id}`);
             const snap = await get(postRef);
-            if(snap.exists()) await remove(postRef);
-            else await set(postRef, true);
+            if(snap.exists()) await remove(postRef); else await set(postRef, true);
         }
-
-        window.showComments = (pid) => {
-            const el = document.getElementById(`comments-${pid}`);
-            el.style.display = el.style.display === 'block' ? 'none' : 'block';
-        }
-
+        window.showComments = (pid) => { const el = document.getElementById(`comments-${pid}`); el.style.display = el.style.display === 'block' ? 'none' : 'block'; }
         window.addComment = async (pid) => {
             const inp = document.getElementById(`cmt-inp-${pid}`);
-            const txt = inp.value.trim();
-            if(!txt) return;
-            await push(ref(db, `posts/${pid}/comments`), {
-                uid: currentUser.id,
-                name: currentUser.username,
-                text: txt,
-                timestamp: Date.now()
-            });
+            if(!inp.value.trim()) return;
+            await push(ref(db, `posts/${pid}/comments`), { uid: currentUser.id, name: currentUser.username, text: inp.value.trim(), timestamp: Date.now() });
             inp.value = "";
         }
-
-        window.deleteComment = (pid, cid) => {
-            if(confirm("Delete this comment?")) {
-                remove(ref(db, `posts/${pid}/comments/${cid}`));
-            }
-        }
-
+        window.deleteComment = (pid, cid) => { if(confirm("Delete this comment?")) remove(ref(db, `posts/${pid}/comments/${cid}`)); }
         window.editComment = async (pid, cid, oldText) => {
             const newText = prompt("Edit your comment:", oldText);
-            if(newText && newText.trim() !== "" && newText !== oldText) {
-                await update(ref(db, `posts/${pid}/comments/${cid}`), { text: newText.trim() });
-            }
+            if(newText && newText.trim() !== "") await update(ref(db, `posts/${pid}/comments/${cid}`), { text: newText.trim() });
         }
-
-        window.deletePost = (pid) => {
-            if(confirm("Delete this post?")) remove(ref(db, 'posts/' + pid));
-        }
+        window.deletePost = (pid) => { if(confirm("Delete this post?")) remove(ref(db, 'posts/' + pid)); }
 
         function loadPosts() {
             onValue(ref(db, 'posts'), (snap) => {
@@ -353,9 +335,7 @@
                 feed.innerHTML = "";
                 let posts = [];
                 snap.forEach(c => { posts.push({id: c.key, ...c.val()}); });
-                posts.reverse().forEach(p => {
-                    feed.innerHTML += generatePostHTML(p);
-                });
+                posts.reverse().forEach(p => { feed.innerHTML += generatePostHTML(p); });
             });
         }
 
@@ -365,47 +345,26 @@
             if(!snap.exists()) return;
             const userData = snap.val();
             pushState();
-            
             document.getElementById('newsfeed-page').classList.add('hidden');
             document.getElementById('profile-page').classList.remove('hidden');
-            
             document.getElementById('profPic').src = userData.profilePic || defaultPic;
             document.getElementById('profName').innerText = userData.username;
-            
             const isMe = uid === currentUser.id;
             document.getElementById('cam-label').style.display = isMe ? 'flex' : 'none';
             document.getElementById('edit-name-icon').style.display = isMe ? 'block' : 'none';
-            document.getElementById('prof-tip').innerText = isMe ? "Tap camera to change photo" : "";
+            document.getElementById('msg-btn-prof').style.display = isMe ? 'none' : 'block';
+            if(!isMe) document.getElementById('msg-btn-prof').onclick = () => openInbox(userData);
 
-            const msgBtn = document.getElementById('msg-btn-prof');
-            if(!isMe) {
-                msgBtn.style.display = 'block';
-                msgBtn.onclick = () => openInbox(userData);
-            } else {
-                msgBtn.style.display = 'none';
-            }
-
-            // Real-time listener for profile posts to ensure comments work
             onValue(ref(db, 'posts'), (snap) => {
                 const userFeed = document.getElementById('user-posts-container');
                 userFeed.innerHTML = "";
                 let posts = [];
-                snap.forEach(c => { 
-                    const p = c.val();
-                    if(p.uid === uid) posts.push({id: c.key, ...p}); 
-                });
-                posts.reverse().forEach(p => {
-                    userFeed.innerHTML += generatePostHTML(p);
-                });
+                snap.forEach(c => { if(c.val().uid === uid) posts.push({id: c.key, ...c.val()}); });
+                posts.reverse().forEach(p => { userFeed.innerHTML += generatePostHTML(p); });
             });
         }
-
         window.showMyProfile = () => visitProfile(currentUser.id);
-
-        window.showNewsfeed = () => {
-            document.getElementById('profile-page').classList.add('hidden');
-            document.getElementById('newsfeed-page').classList.remove('hidden');
-        }
+        window.showNewsfeed = () => { document.getElementById('profile-page').classList.add('hidden'); document.getElementById('newsfeed-page').classList.remove('hidden'); }
 
         // --- CHAT ---
         window.openChatList = () => { pushState(); document.getElementById('users-page').classList.remove('hidden'); }
@@ -463,11 +422,12 @@
             document.getElementById('app-interface').style.display = 'flex';
             document.getElementById('myPic').src = currentUser.profilePic || defaultPic;
             document.getElementById('postMyPic').src = currentUser.profilePic || defaultPic;
-            loadPosts();
-            loadUsers();
+            loadPosts(); loadUsers();
         }
 
-        // Global Bindings - crucial for onclick in HTML strings
+        // Global Bindings
+        window.uploadPhoto = uploadPhoto;
+        window.changeName = changeName;
         window.visitProfile = visitProfile;
         window.toggleLike = toggleLike;
         window.showComments = showComments;
