@@ -35,20 +35,37 @@
         /* Post Card */
         .post-card { background: #000; border-bottom: 6px solid #1a1a1a; padding: 15px; }
         .post-header { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
-        .post-user { font-weight: bold; font-size: 15px; }
+        .post-user { font-weight: bold; font-size: 15px; cursor: pointer; }
         .post-time { font-size: 11px; opacity: 0.5; }
         .post-content { font-size: 15px; line-height: 1.4; margin-bottom: 10px; word-wrap: break-word; }
-        .post-actions { border-top: 1px solid #222; padding-top: 10px; display: flex; gap: 20px; color: #aaa; font-size: 14px; }
+        
+        .post-stats { display: flex; justify-content: space-between; padding: 5px 0; font-size: 12px; color: #aaa; border-bottom: 1px solid #222; }
+        .post-actions { padding-top: 10px; display: flex; gap: 20px; color: #aaa; font-size: 14px; }
+        .post-actions span { cursor: pointer; }
+        .post-actions span.liked { color: #8c442c; font-weight: bold; }
         .del-btn { margin-left: auto; color: #ff4444; cursor: pointer; padding: 5px; }
 
-        /* Floating Chat Button */
-        #chat-toggle-btn { position: fixed; bottom: 20px; right: 20px; width: 60px; height: 60px; background: #8c442c; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 24px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); z-index: 500; cursor: pointer; }
+        /* Comment Section */
+        .comment-section { margin-top: 10px; background: #0a0a0a; border-radius: 10px; padding: 10px; display: none; }
+        .comment-input-row { display: flex; gap: 8px; margin-bottom: 10px; }
+        .comment-input-row input { flex: 1; background: #222; border: none; border-radius: 15px; padding: 5px 12px; color: white; font-size: 13px; outline: none; }
+        .comment-item { margin-bottom: 8px; font-size: 13px; display: flex; align-items: flex-start; gap: 5px; }
+        .comment-user { font-weight: bold; color: #8c442c; }
+        .cmt-actions { margin-left: auto; display: flex; gap: 8px; font-size: 11px; opacity: 0.6; }
+        .cmt-actions i { cursor: pointer; }
+        .cmt-actions i:hover { opacity: 1; }
 
         /* Profile Update */
         .profile-container { text-align: center; padding: 30px 20px; background: #111; margin-bottom: 10px; border-bottom: 1px solid #333; }
         .profile-pic-wrapper { position: relative; display: inline-block; }
         .big-prof-pic { width: 110px; height: 110px; border-radius: 50%; border: 3px solid #8c442c; object-fit: cover; }
         .cam-icon { position: absolute; bottom: 5px; right: 5px; background: #8c442c; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 2px solid #111; cursor: pointer; }
+        
+        /* Profile Message Button */
+        #msg-btn-prof { display: none; margin: 15px auto 0; padding: 8px 25px; background: #0084ff; color: white; border-radius: 20px; border: none; font-weight: bold; cursor: pointer; }
+
+        /* Floating Chat Button */
+        #chat-toggle-btn { position: fixed; bottom: 20px; right: 20px; width: 60px; height: 60px; background: #8c442c; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 24px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); z-index: 500; cursor: pointer; }
 
         /* Chat UI */
         #users-page, #inbox-page { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000; z-index: 1000; display: flex; flex-direction: column; }
@@ -85,7 +102,7 @@
 
     <div id="app-interface">
         <div class="header">
-            <img id="myPic" class="post-avatar" src="" onclick="showProfile()">
+            <img id="myPic" class="post-avatar" src="" onclick="showMyProfile()">
             <h2 onclick="showNewsfeed()">Feed</h2>
             <i class="fas fa-sign-out-alt" onclick="logout()" style="color:#8c442c; font-size: 18px;"></i>
         </div>
@@ -103,19 +120,24 @@
         </div>
 
         <div id="profile-page" class="page-content hidden">
+            <div class="header">
+                <i class="fas fa-arrow-left" onclick="showNewsfeed()" style="cursor:pointer;"></i>
+                <h2 style="margin-left: 15px; flex: 1;">Profile</h2>
+            </div>
             <div class="profile-container">
                 <div class="profile-pic-wrapper">
                     <img id="profPic" class="big-prof-pic" src="">
-                    <label for="fileInput" class="cam-icon">
+                    <label id="cam-label" for="fileInput" class="cam-icon">
                         <i class="fas fa-camera"></i>
                     </label>
                     <input type="file" id="fileInput" accept="image/*" style="display: none;" onchange="uploadPhoto(event)">
                 </div>
                 <div style="display: flex; align-items: center; justify-content: center; margin-top:15px;">
                     <h3 id="profName" style="font-size: 22px;">Name</h3>
-                    <i class="fas fa-pen" style="margin-left: 10px; color:#8c442c; cursor:pointer;" onclick="changeName()"></i>
+                    <i id="edit-name-icon" class="fas fa-pen" style="margin-left: 10px; color:#8c442c; cursor:pointer;" onclick="changeName()"></i>
                 </div>
-                <p style="font-size: 13px; color: #8c442c; margin-top: 5px;">Tap camera to change photo</p>
+                <button id="msg-btn-prof">Message</button>
+                <p id="prof-tip" style="font-size: 13px; color: #8c442c; margin-top: 5px;"></p>
             </div>
             <div id="user-posts-container"></div>
         </div>
@@ -143,7 +165,7 @@
         </div>
         <div id="chat-box"></div>
         <div class="chat-footer">
-            <input type="text" id="messageInput" placeholder="Type a message...">
+            <input type="text" id="messageInput" placeholder="Type a message..." onkeydown="if(event.key==='Enter') sendMessage()">
             <button onclick="sendMessage()" style="background:transparent; border:none; color:#0084ff; font-size:22px;"><i class="fas fa-paper-plane"></i></button>
         </div>
     </div>
@@ -168,6 +190,27 @@
         let currentUser = JSON.parse(localStorage.getItem('user')) || null;
         let currentChatId = null;
         const defaultPic = "https://cdn-icons-png.flaticon.com/512/149/149071.png";
+
+        // --- BACK BUTTON LOGIC ---
+        window.addEventListener('popstate', function (event) {
+            const inbox = document.getElementById('inbox-page');
+            const users = document.getElementById('users-page');
+            const profile = document.getElementById('profile-page');
+
+            if (!inbox.classList.contains('hidden')) {
+                closeInbox();
+            } else if (!users.classList.contains('hidden')) {
+                closeChatList();
+            } else if (!profile.classList.contains('hidden')) {
+                showNewsfeed();
+            }
+        });
+
+        function pushState() {
+            if (window.history.state !== "app") {
+                history.pushState("app", "");
+            }
+        }
 
         // --- AUTH ---
         window.toggleAuth = (reg) => {
@@ -201,6 +244,52 @@
 
         window.logout = () => { localStorage.clear(); location.reload(); }
 
+        // --- COMMON POST HTML RENDERER ---
+        function generatePostHTML(p) {
+            const likeCount = p.likes ? Object.keys(p.likes).length : 0;
+            const cmtCount = p.comments ? Object.keys(p.comments).length : 0;
+            const isLiked = p.likes && p.likes[currentUser.id];
+
+            let cmtHtml = "";
+            if(p.comments) {
+                Object.keys(p.comments).forEach(cid => {
+                    const c = p.comments[cid];
+                    const isMyCmt = c.uid === currentUser.id;
+                    cmtHtml += `
+                    <div class="comment-item">
+                        <span class="comment-user">${c.name}:</span> ${c.text}
+                        ${isMyCmt ? `
+                        <div class="cmt-actions">
+                            <i class="fas fa-edit" onclick="editComment('${p.id}', '${cid}', '${c.text}')"></i>
+                            <i class="fas fa-trash" onclick="deleteComment('${p.id}', '${cid}')"></i>
+                        </div>` : ''}
+                    </div>`;
+                });
+            }
+
+            return `
+            <div class="post-card">
+                <div class="post-header">
+                    <img src="${p.pic || defaultPic}" class="post-avatar" onclick="visitProfile('${p.uid}')">
+                    <div><div class="post-user" onclick="visitProfile('${p.uid}')">${p.name}</div><div class="post-time">${new Date(p.timestamp).toLocaleString()}</div></div>
+                    ${p.uid === currentUser.id ? `<i class="fas fa-trash-alt del-btn" onclick="deletePost('${p.id}')"></i>` : ''}
+                </div>
+                <div class="post-content">${p.text}</div>
+                <div class="post-stats"><span><i class="fas fa-thumbs-up"></i> ${likeCount} Reactions</span><span>${cmtCount} Comments</span></div>
+                <div class="post-actions">
+                    <span class="${isLiked?'liked':''}" onclick="toggleLike('${p.id}')"><i class="fas fa-thumbs-up"></i> Like</span>
+                    <span onclick="showComments('${p.id}')"><i class="fas fa-comment"></i> Comment</span>
+                </div>
+                <div class="comment-section" id="comments-${p.id}">
+                    <div id="comment-list-${p.id}">${cmtHtml}</div>
+                    <div class="comment-input-row">
+                        <input type="text" id="cmt-inp-${p.id}" placeholder="Write a comment...">
+                        <i class="fas fa-paper-plane" style="color:#8c442c; margin-top:5px;" onclick="addComment('${p.id}')"></i>
+                    </div>
+                </div>
+            </div>`;
+        }
+
         // --- POSTS ---
         window.createPost = async () => {
             const txt = document.getElementById('postText').value.trim();
@@ -216,69 +305,102 @@
             document.getElementById('postText').value = "";
         }
 
-        window.deletePost = (pid) => {
-            if(confirm("Delete this post?")) {
-                remove(ref(db, 'posts/' + pid)).then(() => {
-                    console.log("Post deleted");
-                });
+        window.toggleLike = async (pid) => {
+            const postRef = ref(db, `posts/${pid}/likes/${currentUser.id}`);
+            const snap = await get(postRef);
+            if(snap.exists()) await remove(postRef);
+            else await set(postRef, true);
+        }
+
+        window.showComments = (pid) => {
+            const el = document.getElementById(`comments-${pid}`);
+            el.style.display = el.style.display === 'block' ? 'none' : 'block';
+        }
+
+        window.addComment = async (pid) => {
+            const inp = document.getElementById(`cmt-inp-${pid}`);
+            const txt = inp.value.trim();
+            if(!txt) return;
+            await push(ref(db, `posts/${pid}/comments`), {
+                uid: currentUser.id,
+                name: currentUser.username,
+                text: txt,
+                timestamp: Date.now()
+            });
+            inp.value = "";
+        }
+
+        window.deleteComment = (pid, cid) => {
+            if(confirm("Delete this comment?")) {
+                remove(ref(db, `posts/${pid}/comments/${cid}`));
             }
+        }
+
+        window.editComment = async (pid, cid, oldText) => {
+            const newText = prompt("Edit your comment:", oldText);
+            if(newText && newText.trim() !== "" && newText !== oldText) {
+                await update(ref(db, `posts/${pid}/comments/${cid}`), { text: newText.trim() });
+            }
+        }
+
+        window.deletePost = (pid) => {
+            if(confirm("Delete this post?")) remove(ref(db, 'posts/' + pid));
         }
 
         function loadPosts() {
             onValue(ref(db, 'posts'), (snap) => {
                 const feed = document.getElementById('feed-container');
-                const userFeed = document.getElementById('user-posts-container');
-                feed.innerHTML = ""; userFeed.innerHTML = "";
+                feed.innerHTML = "";
                 let posts = [];
                 snap.forEach(c => { posts.push({id: c.key, ...c.val()}); });
                 posts.reverse().forEach(p => {
-                    const html = `
-                    <div class="post-card">
-                        <div class="post-header">
-                            <img src="${p.pic || defaultPic}" class="post-avatar">
-                            <div><div class="post-user">${p.name}</div><div class="post-time">${new Date(p.timestamp).toLocaleString()}</div></div>
-                            ${p.uid === currentUser.id ? `<i class="fas fa-trash-alt del-btn" onclick="deletePost('${p.id}')"></i>` : ''}
-                        </div>
-                        <div class="post-content">${p.text}</div>
-                        <div class="post-actions"><span><i class="far fa-heart"></i> Like</span><span><i class="far fa-comment"></i> Comment</span></div>
-                    </div>`;
-                    feed.innerHTML += html;
-                    if(p.uid === currentUser.id) userFeed.innerHTML += html;
+                    feed.innerHTML += generatePostHTML(p);
                 });
             });
         }
 
-        // --- PROFILE ---
-        window.uploadPhoto = (event) => {
-            const file = event.target.files[0];
-            if(!file) return;
-            const reader = new FileReader();
-            reader.onload = async (e) => {
-                const base64Pic = e.target.result;
-                await update(ref(db, 'users/' + currentUser.id), { profilePic: base64Pic });
-                currentUser.profilePic = base64Pic;
-                localStorage.setItem('user', JSON.stringify(currentUser));
-                location.reload(); 
-            };
-            reader.readAsDataURL(file);
-        }
-
-        window.changeName = async () => {
-            const newName = prompt("Enter new name:", currentUser.username);
-            if(newName) {
-                await update(ref(db, 'users/' + currentUser.id), { username: newName });
-                currentUser.username = newName;
-                localStorage.setItem('user', JSON.stringify(currentUser));
-                location.reload();
-            }
-        }
-
-        window.showProfile = () => {
+        // --- PROFILE NAVIGATION ---
+        window.visitProfile = async (uid) => {
+            const snap = await get(ref(db, 'users/' + uid));
+            if(!snap.exists()) return;
+            const userData = snap.val();
+            pushState();
+            
             document.getElementById('newsfeed-page').classList.add('hidden');
             document.getElementById('profile-page').classList.remove('hidden');
-            document.getElementById('profPic').src = currentUser.profilePic || defaultPic;
-            document.getElementById('profName').innerText = currentUser.username;
+            
+            document.getElementById('profPic').src = userData.profilePic || defaultPic;
+            document.getElementById('profName').innerText = userData.username;
+            
+            const isMe = uid === currentUser.id;
+            document.getElementById('cam-label').style.display = isMe ? 'flex' : 'none';
+            document.getElementById('edit-name-icon').style.display = isMe ? 'block' : 'none';
+            document.getElementById('prof-tip').innerText = isMe ? "Tap camera to change photo" : "";
+
+            const msgBtn = document.getElementById('msg-btn-prof');
+            if(!isMe) {
+                msgBtn.style.display = 'block';
+                msgBtn.onclick = () => openInbox(userData);
+            } else {
+                msgBtn.style.display = 'none';
+            }
+
+            // Real-time listener for profile posts to ensure comments work
+            onValue(ref(db, 'posts'), (snap) => {
+                const userFeed = document.getElementById('user-posts-container');
+                userFeed.innerHTML = "";
+                let posts = [];
+                snap.forEach(c => { 
+                    const p = c.val();
+                    if(p.uid === uid) posts.push({id: c.key, ...p}); 
+                });
+                posts.reverse().forEach(p => {
+                    userFeed.innerHTML += generatePostHTML(p);
+                });
+            });
         }
+
+        window.showMyProfile = () => visitProfile(currentUser.id);
 
         window.showNewsfeed = () => {
             document.getElementById('profile-page').classList.add('hidden');
@@ -286,7 +408,7 @@
         }
 
         // --- CHAT ---
-        window.openChatList = () => document.getElementById('users-page').classList.remove('hidden');
+        window.openChatList = () => { pushState(); document.getElementById('users-page').classList.remove('hidden'); }
         window.closeChatList = () => document.getElementById('users-page').classList.add('hidden');
         window.closeInbox = () => document.getElementById('inbox-page').classList.add('hidden');
 
@@ -308,6 +430,9 @@
         }
 
         window.openInbox = (user) => {
+            pushState();
+            document.getElementById('users-page').classList.add('hidden');
+            document.getElementById('profile-page').classList.add('hidden');
             document.getElementById('inbox-page').classList.remove('hidden');
             document.getElementById('pName').innerText = user.username;
             document.getElementById('pPic').src = user.profilePic || defaultPic;
@@ -342,12 +467,22 @@
             loadUsers();
         }
 
-        // Binding functions to window for onclick access
+        // Global Bindings - crucial for onclick in HTML strings
+        window.visitProfile = visitProfile;
+        window.toggleLike = toggleLike;
+        window.showComments = showComments;
+        window.addComment = addComment;
+        window.deleteComment = deleteComment;
+        window.editComment = editComment;
+        window.showMyProfile = showMyProfile;
+        window.showNewsfeed = showNewsfeed;
         window.createPost = createPost;
         window.deletePost = deletePost;
-        window.showProfile = showProfile;
-        window.showNewsfeed = showNewsfeed;
-        window.changeName = changeName;
+        window.openChatList = openChatList;
+        window.closeChatList = closeChatList;
+        window.openInbox = openInbox;
+        window.closeInbox = closeInbox;
+        window.sendMessage = sendMessage;
     </script>
 </body>
 </html>
