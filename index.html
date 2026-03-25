@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>TCHAT 2.0 - Newsfeed, Chat & Gallery Photo</title>
+    <title>TCHAT2.0</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', sans-serif; }
@@ -49,6 +49,7 @@
         .profile-pic-wrapper { position: relative; display: inline-block; }
         .big-prof-pic { width: 110px; height: 110px; border-radius: 50%; border: 3px solid #8c442c; object-fit: cover; }
         .cam-icon { position: absolute; bottom: 5px; right: 5px; background: #8c442c; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 2px solid #111; cursor: pointer; }
+        .edit-name-icon { font-size: 16px; color: #8c442c; cursor: pointer; margin-left: 10px; }
 
         /* Chat UI */
         #users-page, #inbox-page { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000; z-index: 1000; display: flex; flex-direction: column; }
@@ -111,7 +112,10 @@
                     </label>
                     <input type="file" id="fileInput" accept="image/*" style="display: none;" onchange="uploadPhoto(event)">
                 </div>
-                <h3 id="profName" style="margin-top:15px; font-size: 22px;">Name</h3>
+                <div style="display: flex; align-items: center; justify-content: center; margin-top:15px;">
+                    <h3 id="profName" style="font-size: 22px;">Name</h3>
+                    <i class="fas fa-pen edit-name-icon" onclick="changeName()"></i>
+                </div>
                 <p style="font-size: 13px; color: #8c442c; margin-top: 5px;">Tap camera to change photo</p>
             </div>
             <div id="user-posts-container"></div>
@@ -199,7 +203,7 @@
 
         window.logout = () => { localStorage.clear(); location.reload(); }
 
-        // --- PHOTO UPDATE ---
+        // --- PROFILE UPDATES ---
         window.uploadPhoto = (event) => {
             const file = event.target.files[0];
             if(!file) return;
@@ -212,6 +216,19 @@
                 location.reload(); 
             };
             reader.readAsDataURL(file);
+        }
+
+        window.changeName = async () => {
+            const newName = prompt("Enter your new name:", currentUser.username);
+            if (newName && newName.trim() !== "") {
+                const trimmedName = newName.trim();
+                await update(ref(db, 'users/' + currentUser.id), { username: trimmedName });
+                currentUser.username = trimmedName;
+                localStorage.setItem('user', JSON.stringify(currentUser));
+                document.getElementById('profName').innerText = trimmedName;
+                alert("Name updated successfully!");
+                location.reload(); // To update name in posts too
+            }
         }
 
         // --- POSTS ---
@@ -254,7 +271,7 @@
             });
         }
 
-        // --- NAVIGATION FIXED ---
+        // --- NAVIGATION ---
         window.showProfile = () => {
             document.getElementById('newsfeed-page').classList.add('hidden');
             document.getElementById('profile-page').classList.remove('hidden');
@@ -324,7 +341,6 @@
             loadUsers();
         }
 
-        // Global Assignment for HTML onclicks
         window.showProfile = showProfile;
         window.showNewsfeed = showNewsfeed;
     </script>
